@@ -5,9 +5,11 @@
                      racket/port)
          racket/generator)
 
-(provide dir
-         file
-         root)
+(provide dir file root
+         stdin-lines
+         (struct-out state)
+         with-new-state-frame
+         #%datum #%app #%top quote)
 
 ;;; SYNTAX
 (define-for-syntax (build-name-stx stx . parts)  
@@ -63,7 +65,9 @@
 (define-syntax (fetch stx)
   (syntax-case stx ()
     ([_ id] (with-syntax ([name (build-name-stx stx #'state- #'id)])
-              #'(name (current-state))))))
+              #'(name (current-state))))
+    ([_ id def] (with-syntax ([name (build-name-stx stx #'state- #'id)])
+                  #'(or (name (current-state)) def)))))
 
 (define-syntax (with-new-state-frame stx)
   (syntax-case stx ()
@@ -77,15 +81,16 @@
 (define-syntax (maybe-loop-with stx)
   (syntax-case stx ()
     [(maybe-loop-with body ... )
-     (with-syntax ([generator (datum->syntax stx 'generator)]
+     (with-syntax ([foreach (datum->syntax stx 'foreach)]
                    [vals (datum->syntax stx 'values)]
                    [return (datum->syntax stx 'return)]
                    [name (datum->syntax stx 'name)])
-       #'(if generator
+       #'(if foreach
              (let loop ([acum '()])
-               (call-with-values (lambda () (generator))
+               (call-with-values (lambda () (foreach))
                  (lambda vals
-                   (if (not (eof-object? (car vals)))
+                   (if (not (or (eof-object? (car vals))
+                                (void? (car vals))))
                      (let ([name (interpolate name vals)])
                        (loop
                         (call-with-values
@@ -108,7 +113,7 @@
   #:transparent)
 
 (define current-state 
-  (make-parameter (make-state "." 'test)))
+  (make-parameter (make-state #f #f)))
 
 ;;; AUX FUNCS
 (define (interpolate str vals)
@@ -135,7 +140,7 @@
 
 ;;; NODES
 (defnode (file ([name expression]
-                [generator expression]))
+                [foreach expression]))
      (maybe-loop-with
       (let ([file-path (build-path (fetch base-path) name)])
         (case-mode 
@@ -154,7 +159,7 @@
             (delete-file file-path))]))))
 
 (defnode (dir ([name expression]
-               [generator expression]))
+               [foreach expression]))
   (maybe-loop-with
    (let ([full-path (build-path (fetch base-path) name)])
      (case-mode
@@ -174,8 +179,8 @@
                   (null? (directory-list full-path))) 
          (delete-directory full-path))]))))
 
-(define (root-func #:path [path "."]
-                   #:mode [mode 'test]
+(define (root-func #:path [path (fetch base-path ".")]
+                   #:mode [mode (fetch mode 'test)]
                    . children)
   (with-new-state-frame ([base-path path]
                          [mode mode])
@@ -189,3 +194,12 @@
                                                 (list '#:mode check-expression)) )])
                    (define syn-kw (map cdr kw)) 
                    #`(root-func #,@(flatten syn-kw) #,@nokw)))))
+
+;;; GENERATORS
+(define stdin-lines
+  (generator () (let loop ([line (read-line (current-input-port) 'any)])
+                  (yield line)
+                  (loop (read-line (current-input-port) 'any)))))
+
+
+
