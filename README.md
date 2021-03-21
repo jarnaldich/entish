@@ -9,6 +9,25 @@ is to be created/checked/removed. This may be useful, for example, for
 scaffolding a directory structure for a development project (maybe a
 framework).
 
+
+Design goals:
+
+- Code structure should mimic directory structure.
+-
+
+; 1. Estructura del codi hauria de semblar-se visualment a l'estructura de directoris.
+; 2. Hauria de permetre execució de la còpia, però també anàlisi de l'estructura, dependències, etc...
+; 3. La descripció de l'estructura hauria de ser independent de l'acció: una mateixa estructura es pot comprovar, generar, actualitzar, documentar...
+; 4. Ser capaç d'incorporar funcions de "racket" pures de manera agradable, per quan cal més artilleria.
+
+
+; Els nodes corresponent als roots, file i dir actualitzen un pàmetre que dóna un "current path", de fet afegeixen un component al final i segueixen avaluant els fills.
+; Els nodes generadors de contingut (copy-from, zip, template-string ...) són funcions que agafen el current-path com a sortida i fan el que calgui...
+
+
+XXX: Update to newer version
+
+
 For example, the following code:
 
 <pre>
