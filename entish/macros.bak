@@ -1,8 +1,7 @@
 #lang racket
 
 (require (for-syntax syntax/stx
-                     racket/list
-                     racket/port))
+                     racket/list))
 
 (provide forest)
 
@@ -28,7 +27,7 @@
         (let ([new-stack (cons #'path stack)])
           (with-syntax ([ns (datum->syntax stx (cons 'list new-stack))]
                         [rec (install-app-hook stx new-stack #'(t ...))])
-            ;(displayln #'rec)
+
             #`(case-lambda
                 [() (head ns . rec)]
                 [(x) (cond [(eq? x 'name) 'head])])))]
@@ -40,9 +39,8 @@
     (syntax-case body-form-stx ()
       [(head  t ...)
        (cond
-         [(member #'head ids-stx free-identifier=?)       
-          #`(map (lambda (x) (x)) (list #,@(install-app-hook #'head (list #'head) #'(t ...))))           
-          ]
+         [(member #'head ids-stx free-identifier=?)
+          (install-app-hook #'head (list #'head) #'(t ...))]
          [else #'(head  t ...)])]
       [val #'val])))
 
@@ -60,10 +58,5 @@
          #`(let decls  #,@body-forms-stx)))]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Utility  macros for dynamic state
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Utility  macros for node definitions
+;; Utility  macros for easier node definition
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
