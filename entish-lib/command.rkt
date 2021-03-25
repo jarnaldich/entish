@@ -1,0 +1,33 @@
+#lang racket/base
+(require (only-in racket/cmdline
+                  command-line)
+         (only-in racket/vector
+                  vector-drop)
+         entish
+         raco/command-name)
+
+(module+ raco
+  (define command-name (with-handlers ([exn:fail? (lambda _ #f)])
+                         (vector-ref (current-command-line-arguments) 0)))
+  (dispatch command-name))
+
+(define (dispatch command-name)
+  (case command-name
+    [#f "help" (handle-help)]
+    [("build" (handle-build))]))
+
+(define (handle-help)
+  (displayln (format "Entish available commands:
+
+help - show this message
+build - build the directory tree
+check - check the directory tree
+
+")))
+
+(define (handle-build)
+  (define extra-args
+    (command-line #:program "raco entish build"
+                  #:argv (vector-drop (current-command-line-arguments) 1)))
+  )
+

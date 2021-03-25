@@ -24,34 +24,26 @@ Design goals:
 ; Els nodes corresponent als roots, file i dir actualitzen un pàmetre que dóna un "current path", de fet afegeixen un component al final i segueixen avaluant els fills.
 ; Els nodes generadors de contingut (copy-from, zip, template-string ...) són funcions que agafen el current-path com a sortida i fan el que calgui...
 
-
 XXX: Update to newer version
 
+Running
+=======
 
-For example, the following code:
+Can run through raco, like: http://github.com/jessealama/argo . 
 
-<pre>
-(root #:path “~/code/projects/erlang/sample”
-      #:mode ‘build
-      (dir #:name “ebin”
-           (file #:name “sample.app”
-                “{application, Sample, []}”)
-      (dir #:name “src”)
-      (dir #:name “priv”))
-</pre>
+Syntax
+======
 
-Would create three dirs named ``src``, ``priv`` and ``ebin`` under
-``~/code/projects/erlang/sample``, and a file under the ``ebin`` with
-some sample text.
+Starts with ``forest`` , then ``roots``, ...
 
 Nodes
 =====
 
-There are three kind of nodes in Entish: a single root, nested dirs
-and final files. Every node can take some optional parameters
-(starting with ``#:``) affecting its behaviour, and a list of child
-objects (other nodes or strings), which go one level deeper in the
-described directory structure.
+- Regular functions.
+- Nodes take breadcrumb as first argument, then a list of chunks corresponding
+  to their yet to be eveluated children nodes and are expected to return an
+  artifact.
+
 
 ## The ``root`` node
 
@@ -87,42 +79,29 @@ The name of the file will be taken form the ``#:name`` parameter,
 unless there is a ``foreach`` argument to create a set of files. see
 generators below.
 
-Generators
-==========
-
-The ``file`` and ``dir`` nodes can both take a ``foreach`` argument,
-which will take a regular Racket generator as an argument. Instead of
-creating, checking or removing just one file, the operation will be
-repeated as long as the generator does not return ``void`` or ``eof``.
-
-The generator can return many ``values``, which will be interpolated
-into the ``name`` parameter. A ``?n`` in the string passed as a name
-will be replaced with the nth value returned by the generator. 
-
-As an example (taken from the tests), the following code will create a
-file with "Sample text" as its contents named after each line read
-from stdin.
-
-    (root #:path (find-system-path 'temp-dir)
-        #:mode 'build
-        (file #:name "?0.txt"
-              #:foreach stdin-lines
-              "Sample text"))
-
-
-Entish comes with a set of pre-defined generators so that the code can
-be kept compact and descriptive. For example, the ``stdin-lines``
-above will return a value for each line read from ``stdin``.
-
 
 Files
 =====
 
-* ``entish.rkt`` is the main module. It provides the nodes and
+The library (collection) and corresponding package lie in the ``entish-lib``` subdir.
+Collection name is ``entish``. You can download and install it
+by running ``raco pkg install`` from the ``entish`` subdir.
+
+* ``entish/`` is the library collection, entry point at main.rkt so that require
+  loads it with directory (collection) name.
+
   generators that only depend on Racket libraries.
 * ``tests.rkt`` contains the unit tests.
 * ``main.rkt`` contains an example command-line program using the library.
 
+Development
+===========
+
+After installing the package ``entish-lib`` by running ``raco pkg install`` from the ``entish-lib`` subdir.
+
+Run tests with ``raco test entish-test``
+Or continuosly:
+``watchexec --exts rkt raco test entish-test ``
 Status and future plans
 =======================
 
@@ -133,3 +112,9 @@ go in the future. Some ideas are:
 * Include a xml reader that allows the specs to be in an XML file.
 * Change reporting of errors and information.     
 
+Resources
+=========
+
+- [Package Tutorial](https://blog.racket-lang.org/2017/10/tutorial-creating-a-package.html)
+- [Pict Package](https://github.com/racket/pict)
+- [Fear of Macros]()

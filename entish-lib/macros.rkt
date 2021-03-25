@@ -32,6 +32,11 @@
             #`(case-lambda
                 [() (head ns . rec)]
                 [(x) (cond [(eq? x 'name) 'head])])))]
+       [(head t ...)
+          ;(displayln #'rec)
+          #`(case-lambda
+              [() (head #,(cons list stack))]
+              [(x) (cond [(eq? x 'name) 'head])])]
 
        [other #'other]))))
 
@@ -40,8 +45,8 @@
     (syntax-case body-form-stx ()
       [(head  t ...)
        (cond
-         [(member #'head ids-stx free-identifier=?)       
-          #`(map (lambda (x) (x)) (list #,@(install-app-hook #'head (list #'head) #'(t ...))))           
+         [(member #'head ids-stx free-identifier=?)
+          #`(map (lambda (x) (x)) (list #,@(install-app-hook #'head (list #'head) #'(t ...))))
           ]
          [else #'(head  t ...)])]
       [val #'val])))
