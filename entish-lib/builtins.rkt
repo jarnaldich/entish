@@ -7,7 +7,7 @@
 (define mode (make-parameter 'dry))
 
 (define (indent breadcrumb)
-  (apply string-append (for/list [(i breadcrumb)] "    ")))
+  (apply string-append (for/list [(i (cdr breadcrumb))] "    ")))
 
 (define (run-thunk t) (t))
 (define (run-thunks ts) (map run-thunk ts))
@@ -74,7 +74,7 @@
           (path->string f)))
 
   (match (mode)
-    ['dry (log "*Clearing") ]
+    ['dry (map ((curry log) "*Clearing") contents) ]
     ['build
      (for ([f contents])
        (log "Clearing" f)

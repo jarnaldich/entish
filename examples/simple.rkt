@@ -1,15 +1,18 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Recipe
-(forest (roots src-dir ; Agafa de variable d'entorn o param
-               (stage-dir "e:\\temp")
-               (datacloud_2 "\\\\icgc\\dades\\datacloud_2"))
+(forest (roots (tmp (find-system-path 'temp-dir)))
 
+        (tmp
+         (dir "src"
+              (file "prova.txt"
+                    (template-string "PrOva"))
+              (file "prova1.txt"
+                    (template-string "PrOva"))
+              (file "prova1.txt"
+                    (template-string "PrOva")))
 
-         (datacloud_2 (dir "tif_unzip"
-                           (zip "patata.txt")
-                           (file "hola.txt"
-                                 (copy-from stage-dir "arxiu.txt"))
-                           (file "hoxla.txt"
-                                 (template-string "asdasdfasdf"))))
+         (dir "dst"
+              (clear)
+              (file "copy_of_prova.txt"
+                    (copy-from tmp "prova.txt")))))
 
-         (stage-dir (file "prova.txt")))

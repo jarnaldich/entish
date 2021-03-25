@@ -12,6 +12,6 @@
 ;; Add scribblings, dependencies, build-dependencies if needed...
 
 (define raco-commands
-  '(("entish" (submod argo/command raco)
+  '(("entish" (submod entish/command raco)
               "Scaffold directory trees"
               #f)))
