@@ -3,8 +3,10 @@
 (require (for-syntax syntax/stx
                      racket/list
                      racket/port))
-
 (provide forest)
+
+;; Builtins are needed for the syntactic sugar of the root node...
+(require "builtins.rkt")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; DSL Macros
@@ -46,8 +48,10 @@
       [(head  t ...)
        (cond
          [(member #'head ids-stx free-identifier=?)
-          #`(map (lambda (x) (x)) (list #,@(install-app-hook #'head (list #'head) #'(t ...))))
-          ]
+          (with-syntax ([r (datum->syntax body-stx 'root)])
+            #`(case-lambda
+                [()  (r (list head) #,@(install-app-hook #'head (list #'head) #'(t ...)))]
+                [(x) (cond [(eq? x 'name) 'head])]))]
          [else #'(head  t ...)])]
       [val #'val])))
 
@@ -72,3 +76,5 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Utility  macros for node definitions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;

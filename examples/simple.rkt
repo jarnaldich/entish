@@ -12,7 +12,6 @@
                     (template-string "PrOva")))
 
          (dir "dst"
-              (clear)
               (file "copy_of_prova.txt"
                     (copy-from tmp "prova.txt")))))
 

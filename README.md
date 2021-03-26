@@ -126,6 +126,9 @@ go in the future. Some ideas are:
 Improvements
 ------------
 - Use ``syntax/parse`` for better error reporting from the macros.
+- Revise return types to aggregate errors or info on dependencies
+- Revise exception handling in nodes
+- Centralize logging/msg module
 
 Niceties
 --------
@@ -133,11 +136,12 @@ Niceties
 - Iterators
 - Best effort vs fail first
 - Dependency analysis.
-- Async/concurrent execution of macros.
+- Async/concurrent execution of nodes.
 - Support for compilation of scripts from the ``raco entish`` command.
 - Support for "grafts": embedding a tree from another file.
 - Generalized roots / file systems: ftp, webdav (crazier things, like dbs) 
 - Alternative syntax (indentation-based text template that can fall back to racket when needed)
+- More / Better nodes (iterators)
 
 Resources
 =========

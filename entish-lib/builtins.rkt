@@ -1,6 +1,5 @@
 #lang racket
-(require file/glob
-         "macros.rkt")
+(require file/glob)
 (provide (all-defined-out))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Core functions (maybe move to other module)
@@ -89,7 +88,6 @@
                       (glob (breadcrumb->path (cons "*.*" breadcrumb)))]
                      [else (glob dir-or-glob)]))
 
-  (displayln dir-or-glob)
   (define (log prefix f #:func [func printf])
     (func "~a~a  ~a\n"
           (indent breadcrumb)
@@ -163,5 +161,9 @@
   ; return the artifact
   dir-name)
 
+(define (root breadcrumb . rest)
+  (define root (car breadcrumb))
+  (printf "Root: ~a\n" root)
+  (run-thunks rest))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Core functions
