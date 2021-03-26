@@ -6,12 +6,18 @@
          entish
          raco/command-name
          compiler/embed
-         compiler/distribute
-         )
+         compiler/distribute)
+
+(provide (all-defined-out))
 
 (define-namespace-anchor a)
 
 (module+ raco
+  (define command-name (with-handlers ([exn:fail? (lambda _ #f)])
+                         (vector-ref (current-command-line-arguments) 0)))
+  (dispatch command-name))
+
+(module+ main
   (define command-name (with-handlers ([exn:fail? (lambda _ #f)])
                          (vector-ref (current-command-line-arguments) 0)))
   (dispatch command-name))
@@ -65,14 +71,21 @@ compile - compile script into standalone executable
   (displayln (list exe-name file-list))
   (create-embedding-executable exe-name
                                #:modules '(;(#f "entish-lib/main.rkt")
-                                           (#f "entish-lib/command.rkt"))
+                                           (launcher "entish-lib/launcher.rkt"))
                                #:collects-path (current-library-collection-paths)
                                #:configure-via-first-module? #t
                                #:cmdline '("--")
 
-                               #:literal-expression
-                               (parameterize ([current-namespace (make-base-namespace)])
-                                 (compile `(namespace-require ''entish)))
+                               #:literal-expressions ;'((require command))
+                               (parameterize ([current-namespace (namespace-anchor->namespace a)
+                                                                ; (make-base-namespace)
+                                                                 ])
+                                 (list
+;                                  '(require 'entish/command)
+                                  (compile `(namespace-require 'entish))
+                                  (compile `(namespace-require 'entish/launcher))
+                                  (compile `(handle-help))
+                                  ))
                                ;; #:aux '((ico . "db_backup.ico"))
                                #:verbose? #t
                                #:gracket? #f)

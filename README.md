@@ -97,11 +97,25 @@ by running ``raco pkg install`` from the ``entish`` subdir.
 Development
 ===========
 
-After installing the package ``entish-lib`` by running ``raco pkg install`` from the ``entish-lib`` subdir.
+After installing the package ``entish-lib`` by running ``raco pkg install`` from
+the ``entish-lib`` subdir.
 
 Run tests with ``raco test entish-test``
 Or continuosly:
 ``watchexec --exts rkt raco test entish-test ``
+
+Deploy
+======
+I've had some success running:
+
+```
+raco exe entish-lib/command.rkt
+```
+
+To generate a standalone executable for the same machine. Pending to see how to
+redistribute it for machines without a racket installation.
+
+
 Status and future plans
 =======================
 
@@ -109,8 +123,21 @@ The library is still very rough: API may change and has barely been
 tested. It fits my needs so far, but I accept suggestions as where to
 go in the future. Some ideas are:
 
-* Include a xml reader that allows the specs to be in an XML file.
-* Change reporting of errors and information.     
+Improvements
+------------
+- Use ``syntax/parse`` for better error reporting from the macros.
+
+Niceties
+--------
+- Support for non-destructive operations (ie. being able to build, check results and rollback if something goes wrong or something of the like). Could be done with a "safe" parameter that makes destructive nodes (clear, overwriting copies) to do a noop.
+- Iterators
+- Best effort vs fail first
+- Dependency analysis.
+- Async/concurrent execution of macros.
+- Support for compilation of scripts from the ``raco entish`` command.
+- Support for "grafts": embedding a tree from another file.
+- Generalized roots / file systems: ftp, webdav (crazier things, like dbs) 
+- Alternative syntax (indentation-based text template that can fall back to racket when needed)
 
 Resources
 =========

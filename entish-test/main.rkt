@@ -13,10 +13,11 @@
                           (template-string "PrOva"))
                     (file "prova1.txt"
                           (template-string "PrOva"))
-                    (file "prova1.txt"
+                    (file "prova2.txt"
                           (template-string "PrOva")))
                (dir "dst"
-                    (clear)
+                    (delete "*.txt")
+                    (copy-from tmp "src" "prova*.txt" #:match #rx"prova" #:replace "manuela")
                     (file "copy_of_prova.txt"
                           (copy-from tmp "prova.txt"))))))
 

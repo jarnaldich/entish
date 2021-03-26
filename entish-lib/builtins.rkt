@@ -9,6 +9,11 @@
 (define (indent breadcrumb)
   (apply string-append (for/list [(i (cdr breadcrumb))] "    ")))
 
+(define (breadcrumb->path breadcrumb #:drop [drop-prefix 0])
+  (apply build-path (reverse (if (zero? drop-prefix)
+                                 breadcrumb
+                                 (drop breadcrumb drop-prefix)))))
+
 (define (run-thunk t) (t))
 (define (run-thunks ts) (map run-thunk ts))
 
@@ -39,48 +44,74 @@
          (log "ERROR:" #:func eprintf))]
     [m (error "Wrong mode: ~v" m)]))
 
-(define (copy-from breadcrumb . rest)
+(define (copy-from breadcrumb #:match [from-re #f] #:replace [replace-re #f] . rest)
+  (define target-file-or-dir (apply build-path (reverse (cdr breadcrumb))))
+  (define src-glob (glob (apply build-path (cons (car breadcrumb) rest))))
 
-  (define target-file (apply build-path (reverse (cdr breadcrumb))))
-  (define src-file (apply build-path (cons (car breadcrumb) rest)))
+  (define (src->target src-file)
+    ;; Directories are created before its children, so if it's
+    ;; a directory path it should already exist
+    (cond [(directory-exists? target-file-or-dir)
+           (build-path target-file-or-dir (file-name-from-path src-file))]
+          [else target-file-or-dir]))
 
-  (define (log prefix #:func [func printf])
-    (func "~a~a  ~a -> ~a\n"
-          (indent breadcrumb)
-          prefix
-          (path->string src-file)
-          (path->string target-file)))
+  (for ([src-file src-glob]
+        #:when (if from-re
+                   (regexp-match from-re src-file)
+                   #t))
+    (define target-file (src->target (if (and from-re replace-re)
+                                         (regexp-replace from-re (path->string src-file) replace-re)
+                                         src-file)))
+    (define (log prefix #:func [func printf])
+      (func "~a~a  ~a -> ~a\n"
+            (indent breadcrumb)
+            prefix
+            (path->string src-file)
+            (path->string target-file)))
 
-  (match (mode)
-    ['dry (log "*Copying")]
-    ['build
-     (log "Copying")
-     (copy-file src-file target-file #f)]
-    ['check
-     (if (file-exists? src-file)
-         (log "Checking")
-         (log "ERROR:" #:func eprintf))]
-    [m (error "Wrong mode: ~v" m)])
+    (match (mode)
+      ['dry (log "*Copying")]
+      ['build
+       (log "Copying")
+       (copy-file src-file target-file #f)]
+      ['check
+       (if (file-exists? target-file)
+           (log "Checking")
+           (log "ERROR:" #:func eprintf))]
+      [m (error "Wrong mode: ~v" m)]))
 
   )
 
-(define (clear breadcrumb)
-  (define contents (glob (apply build-path (reverse (cons "*.*" breadcrumb)))))
+(define (delete breadcrumb #:match [from-re #f] #:replace [replace-re #f])
+  (define dir-or-glob (breadcrumb->path breadcrumb))
+  (define src-glob (cond
+                     [(directory-exists? dir-or-glob)
+                      (glob (breadcrumb->path (cons "*.*" breadcrumb)))]
+                     [else (glob dir-or-glob)]))
 
+  (displayln dir-or-glob)
   (define (log prefix f #:func [func printf])
     (func "~a~a  ~a\n"
           (indent breadcrumb)
           prefix
           (path->string f)))
 
-  (match (mode)
-    ['dry (map ((curry log) "*Clearing") contents) ]
-    ['build
-     (for ([f contents])
-       (log "Clearing" f)
-       (delete-directory/files f))]
-    ['check #t]
-    [m (error "Wrong mode: ~v" m)])
+  (for ([src-file src-glob]
+        #:when (if from-re
+                   (regexp-match from-re src-file)
+                   #t))
+
+    (define target-file  (if (and from-re replace-re)
+                             (regexp-replace from-re (path->string src-file) replace-re)
+                             src-file))
+
+    (match (mode)
+      ['dry  (log "*Clearing" target-file) ]
+      ['build
+       (log "Clearing" target-file)
+       (delete-directory/files target-file)]
+      ['check #t]
+      [m (error "Wrong mode: ~v" m)]))
 
   (void))
 
