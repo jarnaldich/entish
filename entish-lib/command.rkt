@@ -65,6 +65,8 @@ check - check the directory tree
                                         (overwrite-mode 'overwrite)]
                   [("-s" "--skip") "Skip (do not overwrite or fail) pre-existing file or data"
                                    (overwrite-mode 'skip)]
+                  [("-n" "--newer") "Overwrite only if newer file or data"
+                                   (overwrite-mode 'newer)]
                   #:args args args))
 
   (run-command cmd (overwrite-mode) file-list))

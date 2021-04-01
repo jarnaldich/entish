@@ -6,8 +6,6 @@
 (define mode (make-parameter 'dry))
 (define overwrite-mode (make-parameter 'fail))
 
-(define (overwrite?)
-  (equal? 'overwrite (overwrite-mode)))
 
 (define (indent breadcrumb)
   (apply string-append (for/list [(i (cdr breadcrumb))] "    ")))
@@ -49,7 +47,11 @@
 
 (define (copy-from breadcrumb #:match [from-re #f] #:replace [replace-re #f] . rest)
   (define target-file-or-dir (apply build-path (reverse (cdr breadcrumb))))
-  (define src-glob (glob (apply build-path (cons (car breadcrumb) rest))))
+
+  (define src-glob-or-dir (apply build-path (cons (car breadcrumb) rest)))
+  (define src-glob (glob (if (directory-exists? src-glob-or-dir)
+                             (build-path src-glob-or-dir "*.*")
+                             src-glob-or-dir)))
 
   (define (src->target src-file)
     ;; Directories are created before its children, so if it's
@@ -65,6 +67,24 @@
     (define target-file (src->target (if (and from-re replace-re)
                                          (regexp-replace from-re (path->string src-file) replace-re)
                                          src-file)))
+
+    (define src-time (file-or-directory-modify-seconds src-file))
+    (define target-time (file-or-directory-modify-seconds target-file))
+    (define src-newer? (target-time . < . src-time))
+    (define-values (action-str copy? overwrite?)
+      (cond
+        [(not (file-exists? target-file))
+         (values "Copying" #t #f)]
+        [(equal? 'skip (overwrite-mode))
+         (values "Skipping" #f #f)]
+        [(and (equal? 'newer (overwrite-mode))
+              src-newer?)
+         (values "Replacing newer" #t #t)]
+        [(equal? 'newer (overwrite-mode))
+         (values "Skipping older" #f #f)]
+        [(equal? 'overwrite (overwrite-mode))
+         (values "Replacing" #t #t)]))
+
     (define (log prefix #:func [func printf])
       (func "~a~a  ~a -> ~a\n"
             (indent breadcrumb)
@@ -73,12 +93,14 @@
             (path->string target-file)))
 
     (match (mode)
-      ['dry (log "*Copying")]
+      ['dry (log (format "*~a" action-str))]
       ['build
-       (log "Copying")
-       (copy-file src-file target-file (overwrite?))]
+       (log action-str)
+       (when copy?
+         (copy-file src-file target-file overwrite?))]
       ['check
-       (if (file-exists? target-file)
+       (if (and (file-exists? target-file)
+                (equal? src-time target-time))
            (log "Checking")
            (log "ERROR:" #:func eprintf))]
       [m (error "Wrong mode: ~v" m)]))
@@ -149,6 +171,8 @@
           (indent breadcrumb)
           prefix
           (path->string dir-name)))
+
+
 
   (match (mode)
     ['dry (log "*Creating") ]
