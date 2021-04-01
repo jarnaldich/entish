@@ -4,6 +4,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Core functions (maybe move to other module)
 (define mode (make-parameter 'dry))
+(define overwrite-mode (make-parameter 'fail))
+
+(define (overwrite?)
+  (equal? 'overwrite (overwrite-mode)))
 
 (define (indent breadcrumb)
   (apply string-append (for/list [(i (cdr breadcrumb))] "    ")))
@@ -72,7 +76,7 @@
       ['dry (log "*Copying")]
       ['build
        (log "Copying")
-       (copy-file src-file target-file #f)]
+       (copy-file src-file target-file (overwrite?))]
       ['check
        (if (file-exists? target-file)
            (log "Checking")

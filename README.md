@@ -123,6 +123,13 @@ The library is still very rough: API may change and has barely been
 tested. It fits my needs so far, but I accept suggestions as where to
 go in the future. Some ideas are:
 
+TODO
+----
+
+- check should compare timestamps …
+- if-newer overwrite mode
+
+
 Improvements
 ------------
 - Use ``syntax/parse`` for better error reporting from the macros.
