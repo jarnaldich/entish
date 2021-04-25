@@ -25,7 +25,7 @@
 (define (dispatch command-name)
   (case command-name
     [(#f "help") (handle-help)]
-    [("build" "check" "dry") (handle-command (string->symbol command-name))]))
+    [("build" "check" "dry" "graph") (handle-command (string->symbol command-name))]))
 
 (define (handle-help)
   (displayln (format "
@@ -38,6 +38,7 @@ help - show this message
 build - build the directory tree
 check - check the directory tree
 dry   - perform a dry run (do not modify anything)
+graph   - output a dependency graph in graphviz format
 
 ")))
 
@@ -50,7 +51,9 @@ dry   - perform a dry run (do not modify anything)
 
     ;; Here we could also load user-provided functions...
     (for ([f args])
-      ((load f)))))
+      (define result ((load f)))
+      (displayln result)
+      )))
 
 
 (define (subcommand-argv) (vector-drop (current-command-line-arguments) 1))

@@ -29,7 +29,18 @@ XXX: Update to newer version
 Running
 =======
 
-Can run through raco, like: http://github.com/jessealama/argo . 
+Can run through raco once installed (see command.rkt inside entish-lib):
+
+```
+raco entish ...
+```
+
+That is a bit cumbersome for developing, since e.g. adding an import requires
+reinstalling, so the same can be accomplished through:
+
+```
+racket entish-lib/command.rkt ...
+```
 
 Syntax
 ======
@@ -43,6 +54,9 @@ Nodes
 - Nodes take breadcrumb as first argument, then a list of chunks corresponding
   to their yet to be eveluated children nodes and are expected to return an
   artifact.
+- File and Dir nodes are no-ops, in the sense that they just call their children
+  with the appropiate breadcrumb for the heavy lifting, collecting the results.
+  The actual artifact creation is done in the children.
 
 
 ## The ``root`` node
@@ -157,3 +171,5 @@ Resources
 - [Package Tutorial](https://blog.racket-lang.org/2017/10/tutorial-creating-a-package.html)
 - [Pict Package](https://github.com/racket/pict)
 - [Fear of Macros]()
+
+- http://github.com/jessealama/argo - Raco command integration

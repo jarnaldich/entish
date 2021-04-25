@@ -2,24 +2,24 @@
 (require entish
          rackunit)
 
+(define (load-test fname)
+  (let-values ([(base f whatever)
+                (split-path (resolved-module-path-name
+                             (variable-reference->resolved-module-path
+                              (#%variable-reference))))])
+             (load (build-path base fname))))
+
+(define-namespace-anchor a)
+
 (test-case "Simple test case"
   (test-begin
-    (parameterize [(mode 'build)]
-      ((forest (roots (tmp (find-system-path 'temp-dir)))
+    (parameterize [(mode 'dry)
+                   (overwrite-mode 'skip)
+                   [current-namespace (namespace-anchor->namespace a)]
+                   ]
 
-              (tmp
-               (dir "src"
-                    (file "prova.txt"
-                          (template-string "PrOva"))
-                    (file "prova1.txt"
-                          (template-string "PrOva"))
-                    (file "prova2.txt"
-                          (template-string "PrOva")))
-               (dir "dst"
-                    (delete "*.txt")
-                    (copy-from tmp "src" "prova*.txt" #:match #rx"prova" #:replace "manuela")
-                    (file "copy_of_prova.txt"
-                          (copy-from tmp "prova.txt")))))))
+      (namespace-require 'entish)
+      ((load-test  "simple.rkt")))
 
     (check-equal?
      (file->string (build-path (find-system-path 'temp-dir) "prova.txt"))

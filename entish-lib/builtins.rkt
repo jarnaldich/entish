@@ -16,7 +16,13 @@
                                  (drop breadcrumb drop-prefix)))))
 
 (define (run-thunk t) (t))
-(define (run-thunks ts) (map run-thunk ts))
+(define (run-thunks ts)
+  (result-ok
+   (for/fold ([acum '()])
+             ([t ts])
+     (match (run-thunk t)
+       [(result-ok deps) (append deps acum)]
+       [else (error "Result is not ok")]))))
 
 (struct entish-node (breadcrumb children)
   #:transparent)
@@ -30,9 +36,28 @@
     (displayln "Validating"))
   #:transparent)
 
+(define (can-copy-newer? src-file target-file)
+
+  (if (file-exists? target-file)
+      (< (file-or-directory-modify-seconds target-file)
+         (file-or-directory-modify-seconds src-file))
+      #t))
+
+(define (timestamps-match? src-file target-file)
+  (if (file-exists? target-file)
+      (equal? (file-or-directory-modify-seconds target-file)
+              (file-or-directory-modify-seconds src-file))
+      #f))
+
+;;XXX: Maybe use raise-user-error instead???
+(define (panic! tpl . args)
+  (apply eprintf (list tpl args))
+  (exit -1))
+
+
 ;;; Result types
 (struct result ())
-(struct result-ok result (artifacts))
+(struct result-ok result (artifacts) #:transparent)
 (struct result-error result (message))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -60,24 +85,9 @@
           (file->string target-file) txt)
          (log "Checking")
          (log "ERROR:" #:func eprintf))]
-    [m (error "Wrong mode: ~v" m)]))
+    [m (error "Wrong mode: ~v" m)])
 
-(define (can-copy-newer? src-file target-file)
-
-  (if (file-exists? target-file)
-      (< (file-or-directory-modify-seconds target-file)
-         (file-or-directory-modify-seconds src-file))
-      #t))
-
-(define (timestamps-match? src-file target-file)
-  (if (file-exists? target-file)
-      (equal? (file-or-directory-modify-seconds target-file)
-              (file-or-directory-modify-seconds src-file))
-      #f))
-
-(define (panic! tpl . args)
-  (apply eprintf (list tpl args))
-  (exit -1))
+  (result-ok (list (list "template-string" target-file))))
 
 (define (copy-from breadcrumb #:match [from-re #f] #:replace [replace-re #f] . rest)
   (define target-file-or-dir (apply build-path (reverse (cdr breadcrumb))))
@@ -94,51 +104,55 @@
            (build-path target-file-or-dir (file-name-from-path src-file))]
           [else target-file-or-dir]))
 
-  (for ([src-file src-glob]
-        #:when (if from-re
-                   (regexp-match from-re src-file)
-                   #t))
-    (define target-file (src->target (if (and from-re replace-re)
-                                         (regexp-replace from-re (path->string src-file) replace-re)
-                                         src-file)))
+  (define deps 
+    (for/list ([src-file src-glob]
+               #:when (if from-re
+                          (regexp-match from-re src-file)
+                          #t))
+      (define target-file (src->target
+                           (if (and from-re replace-re)
+                               (regexp-replace from-re (path->string src-file) replace-re)
+                               src-file)))
 
-    (define-values (action-str copy? overwrite?)
-      (cond
-        [(not (file-exists? target-file))
-         (values "Copying" #t #f)]
-        [(equal? 'skip (overwrite-mode))
-         (values "Skipping" #f #f)]
-        [(and (equal? 'newer (overwrite-mode))
-              (can-copy-newer? src-file target-file))
-         (values "Replacing newer" #t #t)]
-        [(equal? 'newer (overwrite-mode))
-         (values "Skipping older" #f #f)]
-        [(equal? 'overwrite (overwrite-mode))
-         (values "Replacing" #t #t)]
-        [(equal? 'fail (overwrite-mode))
-         (panic! "Not overwiting file ~a~n You may look into -s/-o/-n overwrite cmdline switches" target-file)
-         ]))
+      (define-values (action-str copy? overwrite?)
+        (cond
+          [(not (file-exists? target-file))
+           (values "Copying" #t #f)]
+          [(equal? 'skip (overwrite-mode))
+           (values "Skipping" #f #f)]
+          [(and (equal? 'newer (overwrite-mode))
+                (can-copy-newer? src-file target-file))
+           (values "Replacing newer" #t #t)]
+          [(equal? 'newer (overwrite-mode))
+           (values "Skipping older" #f #f)]
+          [(equal? 'overwrite (overwrite-mode))
+           (values "Replacing" #t #t)]
+          [(equal? 'fail (overwrite-mode))
+           (panic! "Not overwiting file ~a~n You may look into -s/-o/-n overwrite cmdline switches" target-file)
+           ]))
 
-    (define (log prefix #:func [func printf])
-      (func "~a~a  ~a -> ~a\n"
-            (indent breadcrumb)
-            prefix
-            (path->string src-file)
-            (path->string target-file)))
+      (define (log prefix #:func [func printf])
+        (func "~a~a  ~a -> ~a\n"
+              (indent breadcrumb)
+              prefix
+              (path->string src-file)
+              (path->string target-file)))
 
-    (match (mode)
-      ['dry (log (format "*~a" action-str))]
-      ['build
-       (log action-str)
-       (when copy?
-         (copy-file src-file target-file overwrite?))]
-      ['check
-       (if (timestamps-match? src-file target-file)
-           (log "Checking")
-           (log "ERROR:" #:func eprintf))]
-      [m (error "Wrong mode: ~v" m)]))
+      (match (mode)
+        ['dry (log (format "*~a" action-str))]
+        ['build
+         (log action-str)
+         (when copy?
+           (copy-file src-file target-file overwrite?))]
+        ['check
+         (if (timestamps-match? src-file target-file)
+             (log "Checking")
+             (log "ERROR:" #:func eprintf))]
+        [m (error "Wrong mode: ~v" m)])
 
-  )
+      (list src-file target-file)))
+
+  (result-ok deps))
 
 (define (delete breadcrumb #:match [from-re #f] #:replace [replace-re #f])
   (define dir-or-glob (breadcrumb->path breadcrumb))
@@ -153,24 +167,27 @@
           prefix
           (path->string f)))
 
-  (for ([src-file src-glob]
-        #:when (if from-re
-                   (regexp-match from-re src-file)
-                   #t))
+  (define deps
+    (for/list ([src-file src-glob]
+          #:when (if from-re
+                     (regexp-match from-re src-file)
+                     #t))
 
-    (define target-file  (if (and from-re replace-re)
-                             (regexp-replace from-re (path->string src-file) replace-re)
-                             src-file))
+      (define target-file  (if (and from-re replace-re)
+                               (regexp-replace from-re (path->string src-file) replace-re)
+                               src-file))
 
-    (match (mode)
-      ['dry  (log "*Clearing" target-file) ]
-      ['build
-       (log "Clearing" target-file)
-       (delete-directory/files target-file)]
-      ['check #t]
-      [m (error "Wrong mode: ~v" m)]))
+      (match (mode)
+        ['dry  (log "*Clearing" target-file) ]
+        ['build
+         (log "Clearing" target-file)
+         (delete-directory/files target-file)]
+        ['check #t]
+        [m (error "Wrong mode: ~v" m)])
 
-  (void))
+      (list src-file "*thrash*")))
+
+  (result-ok deps))
 
 (define (file breadcrumb . rest)
   (define fname (apply build-path (reverse breadcrumb)))
@@ -191,9 +208,7 @@
          (log "ERROR:" #:func eprintf))]
     [m (error "Wrong mode: ~v" m)])
 
-  (run-thunks rest)
-
-  fname)
+  (run-thunks rest))
 
 (define (dir breadcrumb . rest)
 
@@ -218,9 +233,7 @@
          (log "ERROR:" #:func eprintf))]
     [m (error "Wrong mode: ~v" m)])
 
-  (run-thunks rest)
-  ; return the artifact
-  dir-name)
+  (run-thunks rest))
 
 (define (root breadcrumb . rest)
   (define root (car breadcrumb))

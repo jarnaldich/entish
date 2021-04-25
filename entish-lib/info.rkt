@@ -5,7 +5,8 @@
 (define version "0.1")
 
 (define deps '("base"
-               ["racket" "6.0"]))
+               ["racket" "6.0"]
+               "graph-lib"))
 
 (define build-deps '("rackunit-lib"))
 (define package-authors '("Joan Arnaldich <guesswhat@donotevercontactme.com>"))
