@@ -37,6 +37,7 @@ Available commands:
 help - show this message
 build - build the directory tree
 check - check the directory tree
+dry   - perform a dry run (do not modify anything)
 
 ")))
 

@@ -16,8 +16,25 @@
 (define (run-thunk t) (t))
 (define (run-thunks ts) (map run-thunk ts))
 
+(struct entish-node (breadcrumb children)
+  #:transparent)
+
+(struct copy* entish-node ()
+  #:guard (lambda (breadcrumb children type-name)
+            (displayln "Validating copy-node")
+            (values breadcrumb children))
+  #:property prop:procedure
+  (lambda (self args)
+    (displayln "Validating"))
+  #:transparent)
+
+;;; Result types
+(struct result ())
+(struct result-ok result (artifacts))
+(struct result-error result (message))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Core functions
+;; Node functions
 
 (define (template-string breadcrumb . rest)
 

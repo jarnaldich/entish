@@ -110,10 +110,11 @@ I've had some success running:
 
 ```
 raco exe entish-lib/command.rkt
+raco distribute <deploy_dir> entish-lib/command.exe
 ```
 
-To generate a standalone executable for the same machine. Pending to see how to
-redistribute it for machines without a racket installation.
+To generate a standalone executable that works even on a different machine (same
+OS).
 
 
 Status and future plans
