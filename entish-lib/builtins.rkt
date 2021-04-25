@@ -45,6 +45,23 @@
          (log "ERROR:" #:func eprintf))]
     [m (error "Wrong mode: ~v" m)]))
 
+(define (can-copy-newer? src-file target-file)
+
+  (if (file-exists? target-file)
+      (< (file-or-directory-modify-seconds target-file)
+         (file-or-directory-modify-seconds src-file))
+      #t))
+
+(define (timestamps-match? src-file target-file)
+  (if (file-exists? target-file)
+      (equal? (file-or-directory-modify-seconds target-file)
+              (file-or-directory-modify-seconds src-file))
+      #f))
+
+(define (panic! tpl . args)
+  (apply eprintf (list tpl args))
+  (exit -1))
+
 (define (copy-from breadcrumb #:match [from-re #f] #:replace [replace-re #f] . rest)
   (define target-file-or-dir (apply build-path (reverse (cdr breadcrumb))))
 
@@ -68,9 +85,6 @@
                                          (regexp-replace from-re (path->string src-file) replace-re)
                                          src-file)))
 
-    (define src-time (file-or-directory-modify-seconds src-file))
-    (define target-time (file-or-directory-modify-seconds target-file))
-    (define src-newer? (target-time . < . src-time))
     (define-values (action-str copy? overwrite?)
       (cond
         [(not (file-exists? target-file))
@@ -78,12 +92,15 @@
         [(equal? 'skip (overwrite-mode))
          (values "Skipping" #f #f)]
         [(and (equal? 'newer (overwrite-mode))
-              src-newer?)
+              (can-copy-newer? src-file target-file))
          (values "Replacing newer" #t #t)]
         [(equal? 'newer (overwrite-mode))
          (values "Skipping older" #f #f)]
         [(equal? 'overwrite (overwrite-mode))
-         (values "Replacing" #t #t)]))
+         (values "Replacing" #t #t)]
+        [(equal? 'fail (overwrite-mode))
+         (panic! "Not overwiting file ~a~n You may look into -s/-o/-n overwrite cmdline switches" target-file)
+         ]))
 
     (define (log prefix #:func [func printf])
       (func "~a~a  ~a -> ~a\n"
@@ -99,8 +116,7 @@
        (when copy?
          (copy-file src-file target-file overwrite?))]
       ['check
-       (if (and (file-exists? target-file)
-                (equal? src-time target-time))
+       (if (timestamps-match? src-file target-file)
            (log "Checking")
            (log "ERROR:" #:func eprintf))]
       [m (error "Wrong mode: ~v" m)]))
