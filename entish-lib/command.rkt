@@ -41,9 +41,10 @@ dry   - perform a dry run (do not modify anything)
 
 ")))
 
-(define (run-command cmd args)
+(define (run-command cmd ovrwrite-mode args)
 
   (parameterize ([mode cmd]
+                 [overwrite-mode ovrwrite-mode]
                  [current-namespace (namespace-anchor->namespace a)])
     (namespace-require 'entish)
 
@@ -51,12 +52,22 @@ dry   - perform a dry run (do not modify anything)
     (for ([f args])
       ((load f)))))
 
+
 (define (subcommand-argv) (vector-drop (current-command-line-arguments) 1))
 (define (handle-command cmd)
+
+  (define overwrite-mode (make-parameter 'fail)) ; fail | overwrite | skip
 
   (define file-list
     (command-line #:program "raco entish build"
                   #:argv (subcommand-argv)
+                  #:once-any
+                  [("-o" "--overwrite") "Overwrite existing files or data"
+                                        (overwrite-mode 'overwrite)]
+                  [("-s" "--skip") "Skip (do not overwrite or fail) pre-existing file or data"
+                                   (overwrite-mode 'skip)]
+                  [("-n" "--newer") "Overwrite only if newer file or data"
+                                   (overwrite-mode 'newer)]
                   #:args args args))
 
-  (run-command cmd file-list))
+  (run-command cmd (overwrite-mode) file-list))

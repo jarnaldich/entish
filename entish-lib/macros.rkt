@@ -45,15 +45,18 @@
 (define-for-syntax (parse-body slug ids-stx body-stx)
   (for/list ([body-form-stx (syntax->list body-stx)])
     (syntax-case body-form-stx ()
-      [(head  t ...)
+      [(head t ...)
        (cond
          [(member #'head ids-stx free-identifier=?)
           (with-syntax ([r (datum->syntax body-stx 'root)])
             #`(case-lambda
                 [()  (r (list head) #,@(install-app-hook #'head (list #'head) #'(t ...)))]
                 [(x) (cond [(eq? x 'name) 'head])]))]
-         [else #'(head  t ...)])]
-      [val #'val])))
+         [else
+          (begin
+                 #'(head  t ...))])]
+      [val (begin  #'val)])))
+
 
 (define-syntax (forest stx)
   (syntax-case stx (roots)
@@ -61,12 +64,15 @@
      (let* ([slug (datum->syntax stx 'slug)]
             [root-forms-syntax-list (parse-root-forms slug #'root-forms)]
             [root-ids-stx (map stx-car root-forms-syntax-list)]
-            [body-forms-stx (parse-body slug root-ids-stx #'(body ...))])
+            [body-forms (parse-body slug root-ids-stx #'(body ...))])
        ; (displayln root-forms-syntax-list)
        ; (displayln body-forms-stx)
        (with-syntax ([decls (datum->syntax stx root-forms-syntax-list)]
+                     ;[body-forms-stx (datum->syntax stx body-forms)]
                      [slug slug])
-         #`(let decls  #,@body-forms-stx)))]))
+         ; Maybe in the future can be extended to a case-lambda if metadata is needed (grafts)
+         #`(thunk (let decls  (map (lambda (thunk) (thunk))
+                                   (list #,@body-forms))))))]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Utility  macros for dynamic state
