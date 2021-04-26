@@ -6,6 +6,7 @@
 
 (define deps '("base"
                ["racket" "6.0"]
+               "uuid"
                "graph-lib"))
 
 (define build-deps '("rackunit-lib"))

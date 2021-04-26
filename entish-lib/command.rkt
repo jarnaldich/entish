@@ -4,6 +4,7 @@
          (only-in racket/vector
                   vector-drop)
          entish
+         graph
          raco/command-name
          compiler/embed
          compiler/distribute)
@@ -52,7 +53,7 @@ graph   - output a dependency graph in graphviz format
     ;; Here we could also load user-provided functions...
     (for ([f args])
       (define result ((load f)))
-      (displayln result)
+      (printf (apply graphviz result))
       )))
 
 

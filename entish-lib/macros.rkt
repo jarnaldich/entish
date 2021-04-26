@@ -2,6 +2,7 @@
 
 (require (for-syntax syntax/stx
                      racket/list
+                     racket/string
                      racket/port))
 (provide forest)
 
@@ -26,6 +27,16 @@
    stx
    (for/list ([form (syntax->list forms)])
      (syntax-case form ()
+       [(head t ...)
+        (string-prefix? (symbol->string (syntax->datum #'head))
+                        "+")
+;        (free-identifier=? #'head (datum->syntax stx 'seq))
+        (begin
+          (with-syntax ([ns (datum->syntax stx (cons 'list stack))]
+                        [rec (install-app-hook stx stack #'(t ...))])
+            #`(case-lambda
+                [() (head ns . rec)]
+                [(x) (cond [(eq? x 'name) 'head])])))]
        [(head path t ...)
         (let ([new-stack (cons #'path stack)])
           (with-syntax ([ns (datum->syntax stx (cons 'list new-stack))]
@@ -34,6 +45,7 @@
             #`(case-lambda
                 [() (head ns . rec)]
                 [(x) (cond [(eq? x 'name) 'head])])))]
+
        [(head t ...)
           ;(displayln #'rec)
           #`(case-lambda

@@ -118,6 +118,15 @@ Run tests with ``raco test entish-test``
 Or continuosly:
 ``watchexec --exts rkt raco test entish-test ``
 
+Plotting
+========
+
+Using a combination of dot and rsvg-convert
+
+```
+racket command.rkt dry -s ../entish-test/simple.rkt | awk -e '/digraph/,/END/ { print }' | dot -T svg | rsvg-convert | wezterm imgcat
+```
+
 Deploy
 ======
 I've had some success running:
@@ -141,8 +150,13 @@ go in the future. Some ideas are:
 TODO
 ----
 
-- check should compare timestamps …
-- if-newer overwrite mode
+- Dependency graph nodes are now strings, should be a struct including a
+  hashable that can be used to uniquely identify them.
+- Sequence node that forces each child to be executed in sequence, by
+  introducing dependencies between the thunks, this would prevent nodes like
+  "delete" to be executed concurrently (see simple.rkt in examples, graph):
+
+![simple.rkt graph]["simple.png" "simple.rkt graph"]
 
 
 Improvements

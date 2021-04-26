@@ -1,11 +1,15 @@
 #lang racket
-(require file/glob)
+(require file/glob
+         file/md5
+         uuid
+         graph)
+
 (provide (all-defined-out))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Core functions (maybe move to other module)
 (define mode (make-parameter 'dry))
 (define overwrite-mode (make-parameter 'fail))
-
 
 (define (indent breadcrumb)
   (apply string-append (for/list [(i (cdr breadcrumb))] "    ")))
@@ -23,18 +27,6 @@
      (match (run-thunk t)
        [(result-ok deps) (append deps acum)]
        [else (error "Result is not ok")]))))
-
-(struct entish-node (breadcrumb children)
-  #:transparent)
-
-(struct copy* entish-node ()
-  #:guard (lambda (breadcrumb children type-name)
-            (displayln "Validating copy-node")
-            (values breadcrumb children))
-  #:property prop:procedure
-  (lambda (self args)
-    (displayln "Validating"))
-  #:transparent)
 
 (define (can-copy-newer? src-file target-file)
 
@@ -56,9 +48,38 @@
 
 
 ;;; Result types
+;; May want to enforce that a node returns a result, hence the inheritance.
 (struct result ())
 (struct result-ok result (artifacts) #:transparent)
 (struct result-error result (message))
+
+;;; Dependency graph structs
+; uid is a unique identifier for the artifact, name is the screen name for printing, etc...
+; Use methods: gen:equal+hash and gen:custom-write
+(struct artifact (uid name) #:transparent
+
+  #:methods gen:equal+hash
+  [;; Equal if uids are equal
+   (define (equal-proc a b equal?-recur)
+     (equal?-recur (artifact-uid a) (artifact-uid b)))
+
+   (define (hash-proc a hash-recur)
+     (hash-recur (artifact-uid a)))
+
+   (define (hash2-proc a hash2-recur)
+     (hash2-recur (artifact-uid a)))]
+
+  #:methods gen:custom-write
+  [(define (write-proc a port mode)
+     (fprintf port "~a" (artifact-name a)))])
+
+(define (path-artifact path)
+  (artifact path
+            (path->string path)))
+
+(define (unique-artifact name)
+  (artifact (uuid-string)
+            name))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Node functions
@@ -87,7 +108,9 @@
          (log "ERROR:" #:func eprintf))]
     [m (error "Wrong mode: ~v" m)])
 
-  (result-ok (list (list "template-string" target-file))))
+  (define uid (md5 txt))
+  (result-ok (list (list (artifact uid "template-string")
+                         (path-artifact target-file)))))
 
 (define (copy-from breadcrumb #:match [from-re #f] #:replace [replace-re #f] . rest)
   (define target-file-or-dir (apply build-path (reverse (cdr breadcrumb))))
@@ -150,7 +173,8 @@
              (log "ERROR:" #:func eprintf))]
         [m (error "Wrong mode: ~v" m)])
 
-      (list src-file target-file)))
+      (list (path-artifact src-file)
+            (path-artifact target-file))))
 
   (result-ok deps))
 
@@ -185,7 +209,8 @@
         ['check #t]
         [m (error "Wrong mode: ~v" m)])
 
-      (list src-file "*thrash*")))
+      (list (path-artifact src-file) 
+            (unique-artifact "*thrash*"))))
 
   (result-ok deps))
 
@@ -238,6 +263,37 @@
 (define (root breadcrumb . rest)
   (define root (car breadcrumb))
   (printf "Root: ~a\n" root)
-  (run-thunks rest))
+  (define res (run-thunks rest))
+  (match res
+    [(result-ok deps)
+     (unweighted-graph/directed deps)]))
+
+(define (+seq+ breadcrumb . thunks)
+
+  (define (add-src-seq-node seq-artifact dep)
+    (list seq-artifact (first dep)))
+
+  (define (add-target-seq-node seq-artifact dep)
+    (list (second dep) seq-artifact))
+
+  (define-values (deps _ __)
+    (for/fold ([acum '()]
+               [old-seq-artifact null]
+               [seq-artifact (unique-artifact "*seq*")])
+              ([t thunks])
+      (match (run-thunk t)
+        [(result-ok deps) (values
+                           (append acum
+                                   (if (null? old-seq-artifact)
+                                       '()
+                                       (map ((curry add-src-seq-node) old-seq-artifact) deps)
+                                       )
+                                   deps
+                                   (map ((curry add-target-seq-node) seq-artifact) deps))
+                           seq-artifact
+                           (unique-artifact "*seq*"))]
+        [else (error "Result is not ok")])))
+
+  (result-ok deps))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Core functions
