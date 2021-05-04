@@ -26,8 +26,14 @@
   (datum->syntax
    stx
    (for/list ([form (syntax->list forms)])
-     (syntax-case form ()
+     (syntax-case form (let let*)
+       [(let kv t ...)
+        (begin
+          (with-syntax ([ns (datum->syntax stx (cons 'list stack))]
+                        [rec (install-app-hook stx stack #'(t ...))])
+            #`(let kv . rec)))]
        [(head t ...)
+        ;; En aquests casos no inserim
         (string-prefix? (symbol->string (syntax->datum #'head))
                         "+")
 ;        (free-identifier=? #'head (datum->syntax stx 'seq))

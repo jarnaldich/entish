@@ -87,7 +87,7 @@
 (define (template-string breadcrumb . rest)
 
   (define target-file (apply build-path (reverse (cdr breadcrumb))))
-  (define txt (car breadcrumb))
+  (define txt (apply string-append (cons (car breadcrumb) rest)))
 
   (define (log prefix #:func [func printf])
     (func "~a~a template for ~a (~a...)\n"
@@ -244,8 +244,6 @@
           (indent breadcrumb)
           prefix
           (path->string dir-name)))
-
-
 
   (match (mode)
     ['dry (log "*Creating") ]
