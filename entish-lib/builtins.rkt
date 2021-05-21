@@ -11,6 +11,13 @@
 (define mode (make-parameter 'dry))
 (define overwrite-mode (make-parameter 'fail))
 
+(define $@ '$@)
+
+(define ($< breadcrumb . rest)
+  (lambda (breadcrumb-suffix)
+    (apply build-path (append (drop (reverse breadcrumb) breadcrumb-suffix)
+                              rest))))
+
 (define (indent breadcrumb)
   (apply string-append (for/list [(i (cdr breadcrumb))] "    ")))
 
@@ -34,6 +41,11 @@
       (< (file-or-directory-modify-seconds target-file)
          (file-or-directory-modify-seconds src-file))
       #t))
+
+(define (target-is-older? target-file src-files)
+  (findf (lambda (src-file)
+           (can-copy-newer? src-file target-file))
+         src-files))
 
 (define (timestamps-match? src-file target-file)
   (if (file-exists? target-file)
@@ -260,7 +272,27 @@
 
 (define (root breadcrumb . rest)
   (define root (car breadcrumb))
+  (define dir-name (build-path root))
   (printf "Root: ~a\n" root)
+
+  (define (log prefix #:func [func printf])
+    (func "~a~a  ~a\n"
+          (indent breadcrumb)
+          prefix
+          (path->string dir-name)))
+
+  (match (mode)
+    ['dry (log "*Creating") ]
+    ['build
+     (log "Creating")
+     (make-directory* dir-name)]
+    ['check
+     (if (directory-exists? dir-name)
+         (log "Checking")
+         (log "ERROR:" #:func eprintf))]
+    [m (error "Wrong mode: ~v" m)])
+
+
   (define res (run-thunks rest))
   (match res
     [(result-ok deps)
@@ -293,5 +325,78 @@
         [else (error "Result is not ok")])))
 
   (result-ok deps))
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Core functions
+
+(define (+esc+ breadcrumb)
+  ((car breadcrumb)))
+
+(define (exec breadcrumb #:target-marker [target-marker '$@] . rest)
+
+  (define target-file (apply build-path (reverse (cdr breadcrumb))))
+  (define program (car breadcrumb))
+
+  ;; XXX es pot fer que la funcio $f retorni un struct literal que marqui que es un input,
+  ;; de manera que es pugui usar en el sistema de deps...
+  (define-values (deps src-files reversed-args)
+    (for/fold ([deps '()]
+               [src-files '()]
+               [args '()])
+              ([p rest])
+      (cond
+        [(and (procedure? p)
+              (eq? (p 'name)
+                   '$<))
+         ; Add it to both args an deps
+         (let ([input-path ((p) (length breadcrumb))])
+           (values (cons (list (path-artifact input-path)
+                               (path-artifact target-file))
+                         deps)
+                   (cons input-path src-files)
+                   (cons (path->string input-path) args)))]
+        [(eq? p target-marker)
+         (values deps
+                 src-files
+                 (cons
+                  (path->string target-file)
+                   args))]
+        [else (values deps src-files (cons p args))])))
+
+  (define program-args (reverse reversed-args))
+  (define program-args-str (string-join program-args " "))
+  (define command (string-append program " " program-args-str))
+
+  (define (log prefix #:func [func printf])
+        (func "~a~a  ~a -> ~a\n"
+              (indent breadcrumb)
+              prefix
+              command
+              (path->string target-file)))
+
+  (define-values (action-str exec? overwrite?)
+    (cond
+      [(not (file-exists? target-file))
+       (values "EXEC:" #t #f)]
+      [(equal? 'skip (overwrite-mode))
+       (values "Skipping" #f #f)]
+      [(and (equal? 'newer (overwrite-mode))
+            (target-is-older? target-file src-files))
+       (values "Replacing newer" #t #t)]
+      [(equal? 'newer (overwrite-mode))
+       (values "Skipping older" #f #f)]
+      [(equal? 'overwrite (overwrite-mode))
+       (values "Replacing" #t #t)]
+      [(equal? 'fail (overwrite-mode))
+       (panic! "Not overwiting file ~a~n You may look into -s/-o/-n overwrite cmdline switches" target-file)]))
+
+  (match (mode)
+        ['dry (log (format "*~a" action-str))]
+        ['build
+         (log action-str)
+         (when exec?
+           (system/exit-code command))]
+        ['check
+         (if (target-is-older? target-file src-files)
+             (log "ERROR (target is older):" #:func eprintf)
+             (log "Checking"))]
+        [m (error "Wrong mode: ~v" m)])
+
+  (result-ok deps))

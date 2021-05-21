@@ -118,6 +118,11 @@ Run tests with ``raco test entish-test``
 Or continuosly:
 ``watchexec --exts rkt raco test entish-test ``
 
+If the library adds some public function, it should be reinstalled with:
+
+``raco setup -nxiIFDK --pkgs entish-lib``
+
+
 Plotting
 ========
 
@@ -150,11 +155,10 @@ go in the future. Some ideas are:
 TODO
 ----
 
-- Dependency graph nodes are now strings, should be a struct including a
-  hashable that can be used to uniquely identify them.
-- Sequence node that forces each child to be executed in sequence, by
-  introducing dependencies between the thunks, this would prevent nodes like
-  "delete" to be executed concurrently (see simple.rkt in examples, graph):
+- Escape or “eval” function that turns intro normal eval mode (no breadcrumbs),
+  so that racket code can be used at any time (eg. for generating file names, etc…)
+- Cleanup / Abstract nodes. Patterns are emerging, duplicate code.
+- Be able to use generators as first parameters for breadcrumbs. Maybe start with file node? Before cleanup?
 
 ![simple.rkt graph]["simple.png" "simple.rkt graph"]
 
