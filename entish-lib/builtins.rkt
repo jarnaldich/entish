@@ -2,6 +2,7 @@
 (require file/glob
          file/md5
          uuid
+         racket/generator
          graph)
 
 (provide (all-defined-out))
@@ -10,6 +11,7 @@
 ;; Core functions (maybe move to other module)
 (define mode (make-parameter 'dry))
 (define overwrite-mode (make-parameter 'fail))
+(define trail (make-parameter '()))
 
 (define $@ '$@)
 
@@ -21,10 +23,14 @@
 (define (indent breadcrumb)
   (apply string-append (for/list [(i (cdr breadcrumb))] "    ")))
 
+(define (target)
+  (apply build-path (reverse (trail))))
+
 (define (breadcrumb->path breadcrumb #:drop [drop-prefix 0])
   (apply build-path (reverse (if (zero? drop-prefix)
                                  breadcrumb
                                  (drop breadcrumb drop-prefix)))))
+
 
 (define (run-thunk t) (t))
 (define (run-thunks ts)
@@ -96,7 +102,113 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Node functions
 
-(define (template-string breadcrumb . rest)
+(define-syntax (defnode stx)
+  (syntax-case stx (content)
+    ;; Branch (regular nodes) are passed a first *breadcrumb* parameter that can be
+    ;; having to mungle with it every time is somewhat cumbersome, so here we hide it into
+    ;; a var named **breadcrumb**. Same for children *thunks*
+    [(_ (node-name params ...) body ...)
+     (with-syntax ([trail (datum->syntax stx 'trail)]
+                   [children (datum->syntax stx '**children-thunks**)])
+       #`(define (node-name params ... . children)
+           (define deps
+             (if (generator? (car (trail)))
+                 (for/fold ([acum '()])
+                           ([genval (in-producer (car (trail)) (void))])
+                   (parameterize ([trail (cons genval (cdr (trail)))])
+                     (let* ([res (begin
+                                   body ...)])
+                       (match res
+                         [(result-ok deps) (append deps acum)]
+                         [else (error "Result is tot ok")]))))
+                 ;; else
+                 (let* ([res (begin body ...)])
+                   (match res
+                     [(result-ok deps) deps]
+                     [else (error "Result is tot ok")]))))
+
+           (result-ok deps)))]
+
+    ;; Content nodes take file name from parent, they are given a breadcrumb
+    ;; that is actually the first param... Some mungling is needed to make their definition
+    ;; more convenient.
+    [(_ content (node-name params ...) body ...)
+     (with-syntax ([children (datum->syntax stx '**children-thunks**)]
+                   ;; Account for the case where there is no first param...
+                   [trail (datum->syntax stx 'trail)]
+                   [first-param (datum->syntax stx (let ([l (syntax->list #`(params ...))])
+                                                     (if (pair? l)
+                                                         (car l)
+                                                         '**dummy**)))])
+       #`(define (node-name params ... . children)
+           (parameterize ([trail (cdr (trail))])
+             (let* ([l (list params ...)]
+                    [deps
+                     (if (generator? (car (trail)))
+                         (for/fold ([acum '()])
+                                   ([genval (in-producer (car (trail)) (void))])
+                           (parameterize ([trail (cons genval (trail))])
+                             (let* ([res (begin body ...)])
+                               (match res
+                                 [(result-ok deps) (append deps acum)]
+                                 [else (error "Result is tot ok")]))))
+                         ;; else
+                         (let* ([res (begin body ...)])
+                           (match res
+                             [(result-ok deps) deps]
+                             [else (error "Result is tot ok")])))])
+
+               (result-ok deps)))))]))
+
+(define dummy-gen
+  (sequence->generator (list "1st" "2nd" "3rd")))
+
+(defnode (dummy param1 param2)
+
+  (printf "dummy{trail=~a,params=~a,target=~a}\n" (trail)
+          (list param1 param2)
+          (target))
+
+  (result-ok '()))
+
+(defnode content (dummy-content param1 param2)
+
+  (printf "content{trail=~a,params=~a,target=~a}\n" (trail)
+          (list param1 param2)
+          (target))
+
+  (result-ok '()))
+
+(define (make-logger node-desc)
+  (lambda (action #:func [func printf])
+    (func "~a~a ~a ~a\n"
+          (indent (trail))
+          action
+          node-desc
+          (path->string (target)))))
+
+(defnode content (template)
+  (let ([txt (apply string-append **children-thunks**)]
+        [log (make-logger "template for" )])
+
+    (match (mode)
+      ['dry (log "*Writing")]
+      ['build
+       (log "Writing")
+       (display-to-file txt (target) #:exists 'truncate/replace)]
+      ['check
+       (if (equal?
+            (file->string (target)) txt)
+           (log "Checking")
+           (log "ERROR:" #:func eprintf))]
+      [m (error "Wrong mode: ~v" m)])
+
+    (define uid (md5 txt))
+    (result-ok (list (list (artifact uid "template-string")
+                           (path-artifact (target)))))))
+
+(define (template-string . rest)
+  (define breadcrumb (trail))
 
   (define target-file (apply build-path (reverse (cdr breadcrumb))))
   (define txt (apply string-append (cons (car breadcrumb) rest)))
@@ -124,7 +236,9 @@
   (result-ok (list (list (artifact uid "template-string")
                          (path-artifact target-file)))))
 
-(define (copy-from breadcrumb #:match [from-re #f] #:replace [replace-re #f] . rest)
+(define (copy-from #:match [from-re #f] #:replace [replace-re #f] . rest)
+
+  (define breadcrumb (trail))
   (define target-file-or-dir (apply build-path (reverse (cdr breadcrumb))))
 
   (define src-glob-or-dir (apply build-path (cons (car breadcrumb) rest)))
@@ -139,7 +253,7 @@
            (build-path target-file-or-dir (file-name-from-path src-file))]
           [else target-file-or-dir]))
 
-  (define deps 
+  (define deps
     (for/list ([src-file src-glob]
                #:when (if from-re
                           (regexp-match from-re src-file)
@@ -190,7 +304,10 @@
 
   (result-ok deps))
 
-(define (delete breadcrumb #:match [from-re #f] #:replace [replace-re #f])
+(define (delete #:match [from-re #f] #:replace [replace-re #f])
+;; XXX: This dir-or-glob should probably be rewritten once generators work
+
+  (define breadcrumb (trail))
   (define dir-or-glob (breadcrumb->path breadcrumb))
   (define src-glob (cond
                      [(directory-exists? dir-or-glob)
@@ -221,12 +338,28 @@
         ['check #t]
         [m (error "Wrong mode: ~v" m)])
 
-      (list (path-artifact src-file) 
+      (list (path-artifact src-file)
             (unique-artifact "*thrash*"))))
 
   (result-ok deps))
 
-(define (file breadcrumb . rest)
+(defnode (file*)
+  (let ([log (make-logger "file named")])
+
+    (match (mode)
+      ['dry (log "*Creating") ]
+      ['build (log "Creating")]
+      ['check
+       (if (file-exists? (target))
+           (log "Checking")
+           (log "ERROR:" #:func eprintf))]
+      [m (error "Wrong mode: ~v" m)])
+
+    (run-thunks **children-thunks**)))
+
+(define (file . rest)
+
+  (define breadcrumb (trail))
   (define fname (apply build-path (reverse breadcrumb)))
 
   (define (log prefix #:func [func printf])
@@ -247,8 +380,9 @@
 
   (run-thunks rest))
 
-(define (dir breadcrumb . rest)
+(define (dir . rest)
 
+  (define breadcrumb (trail))
   (define dir-name (apply build-path (reverse breadcrumb)))
 
   (define (log prefix #:func [func printf])
@@ -270,7 +404,10 @@
 
   (run-thunks rest))
 
-(define (root breadcrumb . rest)
+(define (root . rest)
+
+  (define breadcrumb (trail))
+
   (define root (car breadcrumb))
   (define dir-name (build-path root))
   (printf "Root: ~a\n" root)
@@ -298,8 +435,9 @@
     [(result-ok deps)
      (unweighted-graph/directed deps)]))
 
-(define (+seq+ breadcrumb . thunks)
+(define (+seq+ . thunks)
 
+  (define breadcrumb (trail))
   (define (add-src-seq-node seq-artifact dep)
     (list seq-artifact (first dep)))
 
@@ -326,11 +464,12 @@
 
   (result-ok deps))
 
-(define (+esc+ breadcrumb)
-  ((car breadcrumb)))
+(define (+esc+ . rest)
+  ((car (trail))))
 
-(define (exec breadcrumb #:target-marker [target-marker '$@] . rest)
+(define (exec #:target-marker [target-marker '$@] . rest)
 
+  (define breadcrumb (trail))
   (define target-file (apply build-path (reverse (cdr breadcrumb))))
   (define program (car breadcrumb))
 

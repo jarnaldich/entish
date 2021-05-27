@@ -3,9 +3,10 @@
                   command-line)
          (only-in racket/vector
                   vector-drop)
-         entish
+        "main.rkt"
          graph
          raco/command-name
+         racket/generator
          compiler/embed
          compiler/distribute)
 

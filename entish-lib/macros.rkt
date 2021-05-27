@@ -39,19 +39,24 @@
 ;        (free-identifier=? #'head (datum->syntax stx 'seq))
         (begin
           (with-syntax ([ns (datum->syntax stx (cons 'list stack))]
+                        [trail (datum->syntax stx 'trail)]
                         [rec (install-app-hook stx stack #'(t ...))])
             #`(case-lambda
-                [() (head ns . rec)]
+                [() (parameterize ([trail ns])
+                      (head . rec))]
                 [(x) (cond [(eq? x 'name) 'head])])))]
        [(head path t ...)
         (let ([new-stack (cons #'path stack)])
           (with-syntax ([ns (datum->syntax stx (cons 'list new-stack))]
+                        [trail (datum->syntax stx 'trail)]
                         [rec (install-app-hook stx new-stack #'(t ...))])
             ;(displayln #'rec)
             #`(case-lambda
-                [() (head ns . rec)]
+                [() (parameterize ([trail ns])
+                      (head . rec))]
                 [(x) (cond [(eq? x 'name) 'head])])))]
 
+       ;; Quin cas?
        [(head t ...)
           ;(displayln #'rec)
           #`(case-lambda
@@ -68,7 +73,8 @@
          [(member #'head ids-stx free-identifier=?)
           (with-syntax ([r (datum->syntax body-stx 'root)])
             #`(case-lambda
-                [()  (r (list head) #,@(install-app-hook #'head (list #'head) #'(t ...)))]
+                [()  (parameterize ([trail (list head)])
+                       (r #,@(install-app-hook #'head (list #'head) #'(t ...))))]
                 [(x) (cond [(eq? x 'name) 'head])]))]
          [else
           (begin

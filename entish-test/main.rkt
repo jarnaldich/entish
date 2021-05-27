@@ -19,7 +19,8 @@
                    ]
 
       (namespace-require 'entish)
-      ((load-test  "simple.rkt")))
+      ((load-test  "simple.rkt"))
+      ((load-test  "node.rkt")))
 
     (check-equal?
      (file->string (build-path (find-system-path 'temp-dir) "prova.txt"))

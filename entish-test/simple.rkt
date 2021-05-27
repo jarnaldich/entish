@@ -2,8 +2,12 @@
 
         (tmp
          (dir "src"
-              (file "prova.txt"
-                    (template-string "PrOva"))
+
+              (file* "prova.txt"
+                     (template "PrOva"))
+
+              #;(file* (sequence->generator (list "prova1.txt" "prova2.txt"))
+                    (template "Prova"))
               (file "prova1.txt"
                     (template-string "PrOva"))
               (file "prova2.txt"
