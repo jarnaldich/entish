@@ -4,14 +4,14 @@
          (dir "src"
 
               (file* "prova.txt"
-                     (template "PrOva"))
+                     (template <> (+esc+ (format "~a" (target))) "AltraProva")
 
-              #;(file* (sequence->generator (list "prova1.txt" "prova2.txt"))
-                    (template "Prova"))
+                     #;(file* (sequence->generator (list "prova1.txt" "prova2.txt"))
+                              (template "Prova")))
               (file "prova1.txt"
-                    (template-string "PrOva"))
+                    (template <> "PrOva"))
               (file "prova2.txt"
-                    (template-string "PrOva")))
+                    (template <> "PrOva")))
          (dir "dst"
               (+seq+
                ;               (delete "*.txt")

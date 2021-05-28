@@ -26,23 +26,27 @@
   (datum->syntax
    stx
    (for/list ([form (syntax->list forms)])
-     (syntax-case form (let let*)
+     (syntax-case form (let let* +esc+)
        [(let kv t ...)
         (begin
           (with-syntax ([ns (datum->syntax stx (cons 'list stack))]
                         [rec (install-app-hook stx stack #'(t ...))])
             #`(let kv . rec)))]
+       [(+esc+ f ...)
+        #`(begin f ...)]
+       [(head f ...)
+        (string-prefix? (symbol->string (syntax->datum #'head)) ".")
+        #`(begin f ...)]
        [(head t ...)
         ;; En aquests casos no inserim
-        (string-prefix? (symbol->string (syntax->datum #'head))
-                        "+")
+        (string-prefix? (symbol->string (syntax->datum #'head)) "+")
 ;        (free-identifier=? #'head (datum->syntax stx 'seq))
         (begin
           (with-syntax ([ns (datum->syntax stx (cons 'list stack))]
                         [trail (datum->syntax stx 'trail)]
                         [rec (install-app-hook stx stack #'(t ...))])
             #`(case-lambda
-                [() (parameterize ([trail ns])
+                [() (parameterize ([trail (remove (void) ns)])
                       (head . rec))]
                 [(x) (cond [(eq? x 'name) 'head])])))]
        [(head path t ...)
@@ -52,7 +56,7 @@
                         [rec (install-app-hook stx new-stack #'(t ...))])
             ;(displayln #'rec)
             #`(case-lambda
-                [() (parameterize ([trail ns])
+                [() (parameterize ([trail (remove (void) ns)])
                       (head . rec))]
                 [(x) (cond [(eq? x 'name) 'head])])))]
 
@@ -73,7 +77,7 @@
          [(member #'head ids-stx free-identifier=?)
           (with-syntax ([r (datum->syntax body-stx 'root)])
             #`(case-lambda
-                [()  (parameterize ([trail (list head)])
+                [()  (parameterize ([trail (remove (void) (list head))])
                        (r #,@(install-app-hook #'head (list #'head) #'(t ...))))]
                 [(x) (cond [(eq? x 'name) 'head])]))]
          [else

@@ -14,17 +14,18 @@
 (define trail (make-parameter '()))
 
 (define $@ '$@)
+(define <> (void))
 
 (define ($< breadcrumb . rest)
   (lambda (breadcrumb-suffix)
     (apply build-path (append (drop (reverse breadcrumb) breadcrumb-suffix)
                               rest))))
 
-(define (indent breadcrumb)
-  (apply string-append (for/list [(i (cdr breadcrumb))] "    ")))
+(define (indent #:extra-indent [extra-indent 0])
+  (apply string-append (for/list [(i (+ extra-indent (length (cdr (trail)))))] "    ")))
 
 (define (target)
-  (apply build-path (reverse (trail))))
+  (apply build-path (reverse (remove (void) (trail)))))
 
 (define (breadcrumb->path breadcrumb #:drop [drop-prefix 0])
   (apply build-path (reverse (if (zero? drop-prefix)
@@ -141,7 +142,7 @@
                                                          (car l)
                                                          '**dummy**)))])
        #`(define (node-name params ... . children)
-           (parameterize ([trail (cdr (trail))])
+           (parameterize (#;[trail (cdr (trail))]) ; XXX Not sure!!!
              (let* ([l (list params ...)]
                     [deps
                      (if (generator? (car (trail)))
@@ -179,17 +180,26 @@
 
   (result-ok '()))
 
-(define (make-logger node-desc)
+(define (make-logger node-desc #:extra-indent [extra-indent 0])
   (lambda (action #:func [func printf])
     (func "~a~a ~a ~a\n"
-          (indent (trail))
+          (indent #:extra-indent extra-indent)
           action
           node-desc
           (path->string (target)))))
 
+(define .concat string-append)
+
 (defnode content (template)
-  (let ([txt (apply string-append **children-thunks**)]
-        [log (make-logger "template for" )])
+  (let* ([stringify (lambda (child)
+                     (cond
+                       [(procedure? child) (begin
+                                             (printf "Child: ~a\n" child)
+                                             ((child)))]
+                       [else child]))]
+
+        [txt (apply string-append (map stringify **children-thunks**))]
+        [log (make-logger "template for" #:extra-indent 1)])
 
     (match (mode)
       ['dry (log "*Writing")]
@@ -207,34 +217,35 @@
     (result-ok (list (list (artifact uid "template-string")
                            (path-artifact (target)))))))
 
-(define (template-string . rest)
-  (define breadcrumb (trail))
+(define +template template)
 
-  (define target-file (apply build-path (reverse (cdr breadcrumb))))
-  (define txt (apply string-append (cons (car breadcrumb) rest)))
+;; XXX: finish
+(defnode content (copy #:match [from-re #f] #:replace [replace-re #f])
+  (let* ([stringify (lambda (child)
+                      (cond
+                        [(procedure? child) (begin
+                                              (printf "Child: ~a\n" child)
+                                              ((child)))]
+                        [else child]))]
+         [txt (apply string-append (map stringify **children-thunks**))]
+         [log (make-logger "file from" #:extra-indent 1)])
 
-  (define (log prefix #:func [func printf])
-    (func "~a~a template for ~a (~a...)\n"
-            (indent breadcrumb)
-            prefix
-            (path->string target-file)
-            (substring (string-trim txt) 0 (min 10 (string-length txt)))))
+    (match (mode)
+      ['dry (log "*Writing")]
+      ['build
+       (log "Writing")
+       (display-to-file txt (target) #:exists 'truncate/replace)]
+      ['check
+       (if (equal?
+            (file->string (target)) txt)
+           (log "Checking")
+           (log "ERROR:" #:func eprintf))]
+      [m (error "Wrong mode: ~v" m)])
 
-  (match (mode)
-    ['dry (log "*Writing")]
-    ['build
-     (log "Writing")
-     (display-to-file txt target-file #:exists 'truncate/replace)]
-    ['check
-     (if (equal?
-          (file->string target-file) txt)
-         (log "Checking")
-         (log "ERROR:" #:func eprintf))]
-    [m (error "Wrong mode: ~v" m)])
-
-  (define uid (md5 txt))
-  (result-ok (list (list (artifact uid "template-string")
-                         (path-artifact target-file)))))
+    (define uid (md5 txt))
+    (result-ok (list (list (artifact uid "template-string")
+                           (path-artifact (target))))))
+  )
 
 (define (copy-from #:match [from-re #f] #:replace [replace-re #f] . rest)
 
@@ -282,7 +293,7 @@
 
       (define (log prefix #:func [func printf])
         (func "~a~a  ~a -> ~a\n"
-              (indent breadcrumb)
+              (indent)
               prefix
               (path->string src-file)
               (path->string target-file)))
@@ -316,7 +327,7 @@
 
   (define (log prefix f #:func [func printf])
     (func "~a~a  ~a\n"
-          (indent breadcrumb)
+          (indent)
           prefix
           (path->string f)))
 
@@ -364,7 +375,7 @@
 
   (define (log prefix #:func [func printf])
     (func "~a~a  ~a\n"
-          (indent breadcrumb)
+          (indent)
           prefix
           (path->string fname)))
 
@@ -387,7 +398,7 @@
 
   (define (log prefix #:func [func printf])
     (func "~a~a  ~a\n"
-          (indent breadcrumb)
+          (indent)
           prefix
           (path->string dir-name)))
 
@@ -414,7 +425,7 @@
 
   (define (log prefix #:func [func printf])
     (func "~a~a  ~a\n"
-          (indent breadcrumb)
+          (indent)
           prefix
           (path->string dir-name)))
 
@@ -505,7 +516,7 @@
 
   (define (log prefix #:func [func printf])
         (func "~a~a  ~a -> ~a\n"
-              (indent breadcrumb)
+              (indent)
               prefix
               command
               (path->string target-file)))
