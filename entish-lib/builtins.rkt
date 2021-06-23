@@ -133,6 +133,7 @@
     ;; Content nodes take file name from parent, they are given a breadcrumb
     ;; that is actually the first param... Some mungling is needed to make their definition
     ;; more convenient.
+    ;; XXX: Since the introduction of <>, this is not needed
     [(_ content (node-name params ...) body ...)
      (with-syntax ([children (datum->syntax stx '**children-thunks**)]
                    ;; Account for the case where there is no first param...
@@ -190,7 +191,7 @@
 
 (define .concat string-append)
 
-(defnode content (template)
+(defnode (template)
   (let* ([stringify (lambda (child)
                      (cond
                        [(procedure? child) (begin
@@ -219,101 +220,65 @@
 
 (define +template template)
 
-;; XXX: finish
-(defnode content (copy #:match [from-re #f] #:replace [replace-re #f])
-  (let* ([stringify (lambda (child)
-                      (cond
-                        [(procedure? child) (begin
-                                              (printf "Child: ~a\n" child)
-                                              ((child)))]
-                        [else child]))]
-         [txt (apply string-append (map stringify **children-thunks**))]
-         [log (make-logger "file from" #:extra-indent 1)])
 
-    (match (mode)
-      ['dry (log "*Writing")]
-      ['build
-       (log "Writing")
-       (display-to-file txt (target) #:exists 'truncate/replace)]
-      ['check
-       (if (equal?
-            (file->string (target)) txt)
-           (log "Checking")
-           (log "ERROR:" #:func eprintf))]
-      [m (error "Wrong mode: ~v" m)])
-
-    (define uid (md5 txt))
-    (result-ok (list (list (artifact uid "template-string")
-                           (path-artifact (target))))))
-  )
-
-(define (copy-from #:match [from-re #f] #:replace [replace-re #f] . rest)
-
-  (define breadcrumb (trail))
-  (define target-file-or-dir (apply build-path (reverse (cdr breadcrumb))))
-
-  (define src-glob-or-dir (apply build-path (cons (car breadcrumb) rest)))
-  (define src-glob (glob (if (directory-exists? src-glob-or-dir)
+(defnode (copy-from* #:match [from-re #f] #:replace [replace-re #f])
+  (let* ([log (make-logger "file to")]
+         [src-glob-or-dir (apply build-path **children-thunks**)]
+         [src-glob (glob (if (directory-exists? src-glob-or-dir)
                              (build-path src-glob-or-dir "*.*")
-                             src-glob-or-dir)))
+                             src-glob-or-dir))]
+         [target-file-or-dir (target)]
+         [src->target (lambda (src-file)
+                        ;; Directories are created before its children, so if it's
+                        ;; a directory path it should already exist
+                        (cond [(directory-exists? target-file-or-dir)
+                               (build-path target-file-or-dir (file-name-from-path src-file))]
+                              [else target-file-or-dir]))]
+         [deps (for/list ([src-file src-glob]
+                          #:when (if from-re
+                                     (regexp-match from-re src-file)
+                                     #t))
+                 (define target-file (src->target
+                                      (if (and from-re replace-re)
+                                          (regexp-replace from-re (path->string src-file) replace-re)
+                                          src-file)))
 
-  (define (src->target src-file)
-    ;; Directories are created before its children, so if it's
-    ;; a directory path it should already exist
-    (cond [(directory-exists? target-file-or-dir)
-           (build-path target-file-or-dir (file-name-from-path src-file))]
-          [else target-file-or-dir]))
+                 ;; This might be the key to greater reuse...
+                 (define-values (action-str copy? overwrite?)
+                   (cond
+                     [(not (file-exists? target-file))
+                      (values "Copying" #t #f)]
+                     [(equal? 'skip (overwrite-mode))
+                      (values "Skipping" #f #f)]
+                     [(and (equal? 'newer (overwrite-mode))
+                           (can-copy-newer? src-file target-file))
+                      (values "Replacing newer" #t #t)]
+                     [(equal? 'newer (overwrite-mode))
+                      (values "Skipping older" #f #f)]
+                     [(equal? 'overwrite (overwrite-mode))
+                      (values "Replacing" #t #t)]
+                     [(equal? 'fail (overwrite-mode))
+                      (panic! "Not overwiting file ~a~n You may look into -s/-o/-n overwrite cmdline switches" target-file)
+                      ]))
 
-  (define deps
-    (for/list ([src-file src-glob]
-               #:when (if from-re
-                          (regexp-match from-re src-file)
-                          #t))
-      (define target-file (src->target
-                           (if (and from-re replace-re)
-                               (regexp-replace from-re (path->string src-file) replace-re)
-                               src-file)))
+                 (match (mode)
+                   ['dry (log (format "*~a" action-str))]
+                   ['build
+                    (log action-str)
+                    (when copy?
+                      (copy-file src-file target-file overwrite?))]
+                   ['check
+                    (if (timestamps-match? src-file target-file)
+                        (log "Checking")
+                        (log "ERROR:" #:func eprintf))]
+                   [m (error "Wrong mode: ~v" m)])
 
-      (define-values (action-str copy? overwrite?)
-        (cond
-          [(not (file-exists? target-file))
-           (values "Copying" #t #f)]
-          [(equal? 'skip (overwrite-mode))
-           (values "Skipping" #f #f)]
-          [(and (equal? 'newer (overwrite-mode))
-                (can-copy-newer? src-file target-file))
-           (values "Replacing newer" #t #t)]
-          [(equal? 'newer (overwrite-mode))
-           (values "Skipping older" #f #f)]
-          [(equal? 'overwrite (overwrite-mode))
-           (values "Replacing" #t #t)]
-          [(equal? 'fail (overwrite-mode))
-           (panic! "Not overwiting file ~a~n You may look into -s/-o/-n overwrite cmdline switches" target-file)
-           ]))
+                 (list (path-artifact src-file)
+                       (path-artifact target-file)))])
 
-      (define (log prefix #:func [func printf])
-        (func "~a~a  ~a -> ~a\n"
-              (indent)
-              prefix
-              (path->string src-file)
-              (path->string target-file)))
+    (displayln **children-thunks**)
+    (result-ok deps)))
 
-      (match (mode)
-        ['dry (log (format "*~a" action-str))]
-        ['build
-         (log action-str)
-         (when copy?
-           (copy-file src-file target-file overwrite?))]
-        ['check
-         (if (timestamps-match? src-file target-file)
-             (log "Checking")
-             (log "ERROR:" #:func eprintf))]
-        [m (error "Wrong mode: ~v" m)])
-
-      (list (path-artifact src-file)
-            (path-artifact target-file))))
-
-  (result-ok deps))
 
 (define (delete #:match [from-re #f] #:replace [replace-re #f])
 ;; XXX: This dir-or-glob should probably be rewritten once generators work
